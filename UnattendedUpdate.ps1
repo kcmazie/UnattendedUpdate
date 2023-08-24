@@ -2,7 +2,7 @@ param(
     [Switch]$Console = $False,        #--[ Set to true to enable local console result display. Defaults to false ]--
     [Switch]$Debug = $False,          #--[ Set to true to only send results to debug email address. Default to false ]--
     [Switch]$Manual = $False,         #--[ Use to run update off-schedule ]--
-    [Switch]$Status = $False,         #--[ If set to true checks for results after the reboot and emails, then goes idle. ]--
+    [Switch]$Status = $False,         #--[ If set to true checks for results and emails, then goes idle. BYPASSES PATCHING ]--
     [Switch]$Deploy = $False,         #--[ If set to true will copy this script to the other members of the peer group ]--
     [Switch]$UpTimeCheck = $False,    #--[ If set to true will send an email alert if no restart occurs in preset # of days ]--
     [Switch]$NoRestart = $False       #--[ Stops restart from occurring. Restart may still occur if update determines it's needed. ]--
@@ -26,7 +26,7 @@ param(
                     : -Console $true (Will enable local console output)
                     : -Debug $true (Not used)
                     : -Manual $true (forces a manual run bypassing the schedule)
-                    : -Status $true (forces a status email to be sent)
+                    : -Status $true (forces a status email to be sent but NO patching is performed)
                     : -Deploy $true (forces the script and config file to be copied to the identical
                     : location on the other peer servers listed in the config file)
                     : -UpTimeCheck $true (If set to true will send an email alert if no restart occurs in preset # of days)
@@ -61,13 +61,14 @@ param(
                     : v2.90 - 03-05-18 - Fixed registry key removal error.
                     : v3.00 - 10-12-18 - Changed AV disable to default to false to stop false emails. Added option
                     : to select wsus (in-house) or windows update (internet) as update source
+                    : v3.10 - 08-24-23 - Clarified that setting "status mode" bypasses performing any updates
                     :
                     #>
-     $Script:ScriptVer = "3.00"
+     $Script:ScriptVer = "3.10"
                     <#
 =======================================================================================#>
 <#PSScriptInfo
-.VERSION 3.00
+.VERSION 3.10
 .AUTHOR Kenneth C. Mazie (kcmjr AT kcmjr.com)
 .DESCRIPTION
 Automatically applies current patches to a single Windows system, then reboots. Emails a status report upon restart. Should be run from a scheduled task. Can deploy itself to "peer" systems.
@@ -233,6 +234,29 @@ function GetResults {
     $Script:MessageBody += "<font size=3 face='times new roman'>- Done. Emailing results...<br>"
     if ($Script:Console){Write-Host "`n- Done. Emailing results...`n" -ForegroundColor yellow }
     SendEmail
+}
+
+Function GetConsoleHost {  #--[ Detect if we are using a script editor or the console ]--
+    $Console = New-Object -TypeName psobject
+    Switch ($Host.Name){
+        'consolehost'{
+            $Console | Add-Member -MemberType NoteProperty -Name "State" -Value $False -force
+            $Console | Add-Member -MemberType NoteProperty -Name "Message" -Value "PowerShell Console detected." -Force
+        }
+        'Windows PowerShell ISE Host'{
+            $Console | Add-Member -MemberType NoteProperty -Name "State" -Value $True -force
+            $Console | Add-Member -MemberType NoteProperty -Name "Message" -Value "PowerShell ISE editor detected." -Force
+        }
+        'PrimalScriptHostImplementation'{
+            $Console | Add-Member -MemberType NoteProperty -Name "State" -Value $True -force
+            $Console | Add-Member -MemberType NoteProperty -Name "Message" -Value "PrimalScript or PowerShell Studio editor detected." -Force
+        }
+        "Visual Studio Code Host" {
+            $Console | Add-Member -MemberType NoteProperty -Name "State" -Value $True -force
+            $Console | Add-Member -MemberType NoteProperty -Name "Message" -Value "Visual Studio Code editor detected." -Force
+        }
+    }
+    Return $Console
 }
 
 Function ServiceMgr ($Svc, $SvcStatus) {
@@ -520,7 +544,23 @@ Function DeployScript{    #--[ Copies this script to all other systems noted in 
     break
 }
 
+Function StatusMsg ($Msg, $Color){
+    If ($Null -eq $Color){
+        $Color = "Magenta"
+    }
+    Write-Host "-- Script Status: $Msg" -ForegroundColor $Color
+    $Msg = ""
+}
+
 #==[ End of Functions / Start of Main Process ]===============================================
+
+#--[ Detect Runspace ]--
+$ConsoleHost = GetConsoleHost  
+If ($ConsoleHost.State){ 
+    StatusMsg $ConsoleHost.Message "Cyan" $Console
+    $Console = $True
+}
+
 if ($Script:Console){Write-Host `n"--[ Beginning Run ]-----------------------------------`n" -ForegroundColor cyan }
 LoadConfig                                               #--[ Load the external config file ]--
 if ($Script:Deploy){DeployScript}                        #--[ Check for a script deployment command, then exit ]--
@@ -592,3 +632,4 @@ if ($Script:Console){Write-Host "`n--- COMPLETED ---" -ForegroundColor Red }
         <Key>kdhCO+HCvL87nsdXN0E6/AWnHhQAZgB7812qh7IObie8mE=</Key>
     </Credentials>
 </Settings>
+#>
