@@ -1,4 +1,4 @@
-<meta name="google-site-verification" content="SiI2B_QvkFxrKW8YNvNf7w7gTIhzZsP9-yemxArYWwI" />
+
 # UnattendedUpdate
 Automatically applies current patches to a single Windows system, then reboots.
 
